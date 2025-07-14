@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from transformers import pipeline
 from pydantic import BaseModel
+from transformers import pipeline
 import csv
 import os
 
@@ -17,8 +17,9 @@ app.add_middleware(
 )
 
 # Загружаем модели
+print("Загрузка моделей...")
 toxicity_model = pipeline("text-classification", model="unitary/toxic-bert", top_k=None)
-fake_news_model = pipeline("text-classification", model="mariagrandury/roberta-base-fakenews-liar")  # ✅ публичная модель
+fake_news_model = pipeline("text-classification", model="mariagrandury/roberta-base-fakenews-liar")
 hate_speech_model = pipeline("text-classification", model="cardiffnlp/twitter-roberta-hate")
 
 class PostData(BaseModel):

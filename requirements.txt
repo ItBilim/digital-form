@@ -1,7 +1,5 @@
 fastapi
-uvicorn[standard]
+uvicorn
 transformers
 torch==2.1.0
 python-multipart
-pydantic
-numpy<2

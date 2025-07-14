@@ -16,8 +16,11 @@ app.add_middleware(
 # Загружаем модели один раз при старте
 toxicity_classifier = pipeline("text-classification", model="unitary/toxic-bert", top_k=None)
 fake_news_classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
-hate_speech_classifier = pipeline("text-classification", model="cardiffnlp/twitter-roberta-hate", top_k=None)
-
+hate_speech_classifier = pipeline(
+    "text-classification",
+    model="Hate-speech-CNERG/bert-base-uncased-hatexplain",
+    top_k=None
+)
 @app.get("/")
 def root():
     return {"message": "Цифровой след API работает"}

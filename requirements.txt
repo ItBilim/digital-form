@@ -1,8 +1,7 @@
 fastapi
 uvicorn[standard]
-transformers>=4.40.0
+transformers
 torch==2.1.0
 python-multipart
-pydantic>=1.10,<3.0
-scipy  # требуется некоторым моделям transformers
-numpy<2  # для совместимости с transformers и torch
+pydantic
+numpy<2

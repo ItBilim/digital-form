@@ -11,10 +11,13 @@ from datetime import datetime
 import os
 import csv
 
+# Получаем токен из переменной окружения
 token = os.getenv("HUGGINGFACE_TOKEN")
+assert token is not None, "❌ HUGGINGFACE_TOKEN не установлен!"
 
 app = FastAPI()
 
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,12 +26,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Подключение статики, если есть
 if os.path.exists("static"):
     app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
+# Подключение БД
 conn = sqlite3.connect("social_behavior.db", check_same_thread=False)
 cursor = conn.cursor()
 
+# Создание таблиц
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS posts (
     id TEXT PRIMARY KEY,
@@ -41,7 +47,6 @@ CREATE TABLE IF NOT EXISTS posts (
     created_at TEXT
 )
 """)
-
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS interactions (
     id TEXT PRIMARY KEY,
@@ -52,6 +57,7 @@ CREATE TABLE IF NOT EXISTS interactions (
 """)
 conn.commit()
 
+# Pydantic модели
 class PostIn(BaseModel):
     text: str
     toxicity: Optional[dict]
@@ -68,25 +74,27 @@ class InteractionIn(BaseModel):
     post_id: str
     action: str
 
+# Загрузка моделей
 print("Загрузка моделей...")
 toxicity_model = pipeline(
     "text-classification",
     model="unitary/toxic-bert",
-    top_k=None
+    top_k=None,
+    use_auth_token=token
 )
-
 fake_news_model = pipeline(
     "text-classification",
-    model="facebook/bart-large-mnli"  # альтернатива без токена
+    model="microsoft/deberta-v3-small-mnli",
+    use_auth_token=token  # ✅ добавлен токен
 )
-
 hate_speech_model = pipeline(
     "text-classification",
     model="cardiffnlp/twitter-roberta-hate",
-    use_auth_token=token if token else None
+    use_auth_token=token
 )
 print("Модели загружены ✅")
 
+# Анализ текста
 def analyze_text_with_models(text: str):
     tox_results = toxicity_model(text)[0]
     toxicity = {r["label"].lower(): r["score"] for r in tox_results}
@@ -95,9 +103,9 @@ def analyze_text_with_models(text: str):
     fake_label = fake_raw["label"]
     fake_score = fake_raw["score"]
 
-    if "CONTRADICTION" in fake_label.upper():
+    if fake_label == "LABEL_0":
         fake = {"label": "fake", "score": fake_score}
-    elif "ENTAILMENT" in fake_label.upper():
+    elif fake_label == "LABEL_2":
         fake = {"label": "real", "score": fake_score}
     else:
         fake = {"label": "neutral", "score": fake_score}
@@ -111,6 +119,7 @@ def analyze_text_with_models(text: str):
         "hate_speech": hate
     }
 
+# Экспорт в CSV
 def export_csv():
     with sqlite3.connect("social_behavior.db") as conn:
         c = conn.cursor()
@@ -126,8 +135,10 @@ def export_csv():
             writer.writerow(["id", "post_id", "action", "timestamp"])
             writer.writerows(c.fetchall())
 
+# Первичный экспорт
 export_csv()
 
+# API endpoints
 @app.post("/api/analyze")
 async def analyze_text(item: PostIn):
     result = analyze_text_with_models(item.text)

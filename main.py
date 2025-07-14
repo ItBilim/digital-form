@@ -12,7 +12,6 @@ import os
 import csv
 
 token = os.getenv("HUGGINGFACE_TOKEN")
-assert token is not None, "❌ HUGGINGFACE_TOKEN не установлен!"
 
 app = FastAPI()
 
@@ -73,17 +72,18 @@ print("Загрузка моделей...")
 toxicity_model = pipeline(
     "text-classification",
     model="unitary/toxic-bert",
-    top_k=None,
-    use_auth_token=token
+    top_k=None
 )
+
 fake_news_model = pipeline(
     "text-classification",
-    model="microsoft/deberta-v3-small-mnli"
+    model="facebook/bart-large-mnli"  # альтернатива без токена
 )
+
 hate_speech_model = pipeline(
     "text-classification",
     model="cardiffnlp/twitter-roberta-hate",
-    use_auth_token=token
+    use_auth_token=token if token else None
 )
 print("Модели загружены ✅")
 
@@ -95,9 +95,9 @@ def analyze_text_with_models(text: str):
     fake_label = fake_raw["label"]
     fake_score = fake_raw["score"]
 
-    if fake_label == "LABEL_0":
+    if "CONTRADICTION" in fake_label.upper():
         fake = {"label": "fake", "score": fake_score}
-    elif fake_label == "LABEL_2":
+    elif "ENTAILMENT" in fake_label.upper():
         fake = {"label": "real", "score": fake_score}
     else:
         fake = {"label": "neutral", "score": fake_score}

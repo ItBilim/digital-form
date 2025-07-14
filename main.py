@@ -1,7 +1,10 @@
 from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
-from transformers import pipeline
+from transformers import pipeline, MarianMTModel, MarianTokenizer
 from typing import List
+from pydantic import BaseModel
+from langdetect import detect
+from sklearn.metrics import classification_report
 
 app = FastAPI()
 
@@ -13,7 +16,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Загружаем модели один раз при старте
+# --- NLP модели ---
 toxicity_classifier = pipeline("text-classification", model="unitary/toxic-bert", top_k=None)
 fake_news_classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
 hate_speech_classifier = pipeline(
@@ -21,12 +24,27 @@ hate_speech_classifier = pipeline(
     model="Hate-speech-CNERG/bert-base-uncased-hatexplain",
     top_k=None
 )
+
+# --- Переводчик (русский -> английский) ---
+translator_model = MarianMTModel.from_pretrained("Helsinki-NLP/opus-mt-ru-en")
+translator_tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-ru-en")
+
+def translate_ru_to_en(text: str) -> str:
+    batch = translator_tokenizer.prepare_seq2seq_batch([text], return_tensors="pt", padding=True)
+    gen = translator_model.generate(**batch)
+    return translator_tokenizer.batch_decode(gen, skip_special_tokens=True)[0]
+
+# --- API ---
+
 @app.get("/")
 def root():
     return {"message": "Цифровой след API работает"}
 
 @app.post("/analyze/")
 async def analyze_text(text: str = Form(...)):
+    if detect(text) == "ru":
+        text = translate_ru_to_en(text)
+
     toxicity = toxicity_classifier(text)
     fake_news = fake_news_classifier(text, candidate_labels=["fake", "real", "satire", "political", "conspiracy"])
     hate_speech = hate_speech_classifier(text)
@@ -36,3 +54,24 @@ async def analyze_text(text: str = Form(...)):
         "fake_news": fake_news,
         "hate_speech": hate_speech
     }
+
+# --- Модель оценки метрик ---
+class EvalSample(BaseModel):
+    text: str
+    true_label: str  # toxic / non-toxic
+
+@app.post("/evaluate/")
+async def evaluate(samples: List[EvalSample]):
+    y_true = []
+    y_pred = []
+
+    for sample in samples:
+        text = sample.text
+        if detect(text) == "ru":
+            text = translate_ru_to_en(text)
+        prediction = toxicity_classifier(text)[0]
+        y_pred.append(prediction["label"].lower())
+        y_true.append(sample.true_label.lower())
+
+    report = classification_report(y_true, y_pred, output_dict=True)
+    return report

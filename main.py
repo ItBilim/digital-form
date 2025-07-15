@@ -69,9 +69,19 @@ async def evaluate(samples: List[EvalSample]):
         text = sample.text
         if detect(text) == "ru":
             text = translate_ru_to_en(text)
-        prediction = toxicity_classifier(text)[0]
-        y_pred.append(prediction["label"].lower())
+
+        result = toxicity_classifier(text)
+        # Универсально достаём label
+        if isinstance(result, list) and isinstance(result[0], dict):
+            predicted_label = result[0]['label']
+        elif isinstance(result, list) and isinstance(result[0], list):
+            predicted_label = result[0][0]['label']
+        else:
+            predicted_label = "unknown"
+
         y_true.append(sample.true_label.lower())
+        y_pred.append(predicted_label.lower())
 
     report = classification_report(y_true, y_pred, output_dict=True)
     return report
+
